@@ -1,0 +1,4 @@
+Put your level background image files in this folder.
+
+Then update the background path in:
+src/data/levelOneConfig.js
