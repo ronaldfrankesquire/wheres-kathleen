@@ -196,6 +196,10 @@ export default function GameScene({ level }) {
       <div
         className={`scene-frame ${isComplete ? "is-complete" : ""}`}
         onClick={handleSceneClick}
+        style={{
+          "--scene-background-filter": level.backgroundFilter,
+          "--scene-complete-background-filter": level.completeBackgroundFilter
+        }}
       >
         <img
           className="scene-background"
@@ -237,6 +241,8 @@ export default function GameScene({ level }) {
                 left: `${kathleen.x}%`,
                 top: `${kathleen.y}%`,
                 width: `${kathleen.width}%`,
+                "--kathleen-hidden-filter": kathleen.hiddenFilter,
+                "--kathleen-hidden-opacity": kathleen.hiddenOpacity,
                 transform: `translate(-50%, -50%) rotate(${
                   kathleen.rotation ?? 0
                 }deg)`,

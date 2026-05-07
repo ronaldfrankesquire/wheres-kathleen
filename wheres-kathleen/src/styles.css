@@ -33,6 +33,40 @@ button {
   padding: 18px 14px 28px;
 }
 
+.level-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto 14px;
+  flex-wrap: wrap;
+}
+
+.level-switcher button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 2px solid rgba(255, 212, 95, 0.88);
+  border-radius: 999px;
+  color: #5d315c;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 18px rgba(211, 94, 142, 0.12);
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.level-switcher button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(211, 94, 142, 0.16);
+}
+
+.level-switcher button.is-active {
+  color: #442846;
+  background: linear-gradient(135deg, #ffd85f, #ffc8e2);
+}
+
 .game-layout {
   width: min(100%, 980px);
   margin: 0 auto;
@@ -192,13 +226,13 @@ h1 {
   display: block;
   width: 100%;
   height: auto;
-  filter: grayscale(1);
+  filter: var(--scene-background-filter, grayscale(1));
   transition: filter 700ms ease, transform 700ms ease;
   user-select: none;
 }
 
 .scene-frame.is-complete .scene-background {
-  filter: grayscale(0);
+  filter: var(--scene-complete-background-filter, grayscale(0));
   transform: scale(1.01);
 }
 
@@ -262,8 +296,12 @@ h1 {
   display: block;
   width: 100%;
   height: auto;
-  filter: grayscale(1) contrast(1.05);
-  transition: filter 180ms ease, drop-shadow 180ms ease;
+  opacity: var(--kathleen-hidden-opacity, 1);
+  filter: var(--kathleen-hidden-filter, grayscale(1) contrast(1.05));
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease,
+    drop-shadow 180ms ease;
   user-select: none;
   pointer-events: none;
 }
@@ -273,6 +311,7 @@ h1 {
 }
 
 .kathleen-target.is-found img {
+  opacity: 1;
   filter: grayscale(0) drop-shadow(0 0 8px rgba(255, 216, 95, 0.95));
 }
 
