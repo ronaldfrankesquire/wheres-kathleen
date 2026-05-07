@@ -14,17 +14,43 @@ export default function App() {
   return (
     <main className="app-shell">
       <nav className="level-switcher" aria-label="Choose scene">
-        {levels.map((level) => (
-          <button
-            className={level.id === currentLevelId ? "is-active" : ""}
-            key={level.id}
-            type="button"
-            aria-pressed={level.id === currentLevelId}
-            onClick={() => setCurrentLevelId(level.id)}
+        <button
+          className="level-step-button"
+          type="button"
+          disabled={currentLevelIndex <= 0}
+          onClick={() => setCurrentLevelId(levels[currentLevelIndex - 1].id)}
+        >
+          Previous
+        </button>
+
+        <label className="level-select-label">
+          <span>Scene</span>
+          <select
+            className="level-select"
+            aria-label="Choose scene level"
+            value={currentLevel.id}
+            onChange={(event) => setCurrentLevelId(event.target.value)}
           >
-            {level.title}
-          </button>
-        ))}
+            {levels.map((level) => (
+              <option key={level.id} value={level.id}>
+                {level.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          className="level-step-button"
+          type="button"
+          disabled={!nextLevel}
+          onClick={() => {
+            if (nextLevel) {
+              setCurrentLevelId(nextLevel.id);
+            }
+          }}
+        >
+          Next
+        </button>
       </nav>
 
       <GameScene

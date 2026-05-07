@@ -28,6 +28,10 @@ button {
   font: inherit;
 }
 
+select {
+  font: inherit;
+}
+
 .app-shell {
   min-height: 100vh;
   padding: 18px 14px 28px;
@@ -35,21 +39,27 @@ button {
 
 .level-switcher {
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin: 0 auto 14px;
-  flex-wrap: wrap;
+  gap: 10px;
+  width: min(100%, 620px);
+  margin: 0 auto 16px;
 }
 
-.level-switcher button {
+.level-step-button,
+.level-select {
   min-height: 38px;
-  padding: 8px 14px;
   border: 2px solid rgba(255, 212, 95, 0.88);
   border-radius: 999px;
   color: #5d315c;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 8px 18px rgba(211, 94, 142, 0.12);
   font-weight: 900;
+}
+
+.level-step-button {
+  flex: 0 0 auto;
+  padding: 8px 14px;
   cursor: pointer;
   transition:
     background 160ms ease,
@@ -57,14 +67,36 @@ button {
     box-shadow 160ms ease;
 }
 
-.level-switcher button:hover {
+.level-step-button:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(211, 94, 142, 0.16);
 }
 
-.level-switcher button.is-active {
+.level-step-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.level-select-label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 240px;
+  min-width: 0;
+  color: #9c4774;
+  font-size: 0.84rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.level-select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 38px 8px 14px;
   color: #442846;
   background: linear-gradient(135deg, #ffd85f, #ffc8e2);
+  cursor: pointer;
 }
 
 .game-layout {
@@ -221,6 +253,10 @@ h1 {
     inset 0 0 0 4px rgba(255, 255, 255, 0.45);
   cursor: pointer;
   isolation: isolate;
+}
+
+.scene-viewport {
+  width: 100%;
 }
 
 .scene-background {
@@ -620,13 +656,54 @@ h1 {
 
 @media (max-width: 620px) {
   .app-shell {
-    padding: 14px 10px 24px;
+    padding: 10px 8px 22px;
+    overflow-x: hidden;
+  }
+
+  .level-switcher {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .level-step-button {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 0.82rem;
+  }
+
+  .level-select-label {
+    grid-template-columns: 1fr;
+    gap: 3px;
+    flex-basis: 150px;
+    font-size: 0.68rem;
+    text-align: left;
+  }
+
+  .level-select {
+    min-height: 36px;
+    padding: 6px 28px 6px 10px;
+    font-size: 0.86rem;
+  }
+
+  .game-header {
+    gap: 2px;
+    margin-bottom: 9px;
+  }
+
+  .level-title {
+    font-size: 0.8rem;
+  }
+
+  h1 {
+    font-size: clamp(1.75rem, 12vw, 2.75rem);
   }
 
   .progress-card {
     grid-template-columns: 1fr;
     gap: 8px;
     border-radius: 18px;
+    margin-bottom: 9px;
+    padding: 8px 10px;
   }
 
   .progress-copy {
@@ -641,9 +718,33 @@ h1 {
     width: min(100%, 180px);
   }
 
+  .game-message {
+    min-height: 24px;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+  }
+
+  .scene-viewport {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 0 0 8px;
+    scrollbar-color: #ffd45f rgba(255, 255, 255, 0.72);
+  }
+
   .scene-frame {
+    width: max(100%, 720px);
     border-width: 3px;
     border-radius: 16px;
-    min-height: 220px;
+    min-height: 0;
+  }
+
+  .completion-actions {
+    margin-top: 12px;
+  }
+
+  .next-level-button,
+  .play-again-button {
+    min-height: 44px;
+    padding: 10px 16px;
   }
 }

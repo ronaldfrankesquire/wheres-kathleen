@@ -247,88 +247,90 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
         {message}
       </p>
 
-      <div
-        className={`scene-frame ${isComplete ? "is-complete" : ""} ${
-          isBackgroundReady ? "is-ready" : "is-loading"
-        }`}
-        onClick={handleSceneClick}
-        style={{
-          "--scene-background-filter": level.backgroundFilter,
-          "--scene-complete-background-filter": level.completeBackgroundFilter
-        }}
-      >
-        <img
-          className="scene-background"
-          src={level.background}
-          alt={`${level.title} seek-and-find scene`}
-          draggable="false"
-          onLoad={() => setIsBackgroundReady(true)}
-        />
-
-        {!isBackgroundReady && (
-          <span className="scene-loading" aria-live="polite">
-            Loading scene...
-          </span>
-        )}
-
-        {isBackgroundReady && activeHint && (
-          <span
-            className="hint-area"
-            key={activeHint.id}
-            style={{
-              left: `${activeHint.x}%`,
-              top: `${activeHint.y}%`,
-              width: `${activeHint.size}%`
-            }}
+      <div className="scene-viewport">
+        <div
+          className={`scene-frame ${isComplete ? "is-complete" : ""} ${
+            isBackgroundReady ? "is-ready" : "is-loading"
+          }`}
+          onClick={handleSceneClick}
+          style={{
+            "--scene-background-filter": level.backgroundFilter,
+            "--scene-complete-background-filter": level.completeBackgroundFilter
+          }}
+        >
+          <img
+            className="scene-background"
+            src={level.background}
+            alt={`${level.title} seek-and-find scene`}
+            draggable="false"
+            onLoad={() => setIsBackgroundReady(true)}
           />
-        )}
 
-        {isBackgroundReady && visibleKathleens.map((kathleen) => {
-          const isFound = foundIds.has(kathleen.id);
-          const kathleenSparkles = sparkles.filter(
-            (sparkle) => sparkle.kathleenId === kathleen.id
-          );
+          {!isBackgroundReady && (
+            <span className="scene-loading" aria-live="polite">
+              Loading scene...
+            </span>
+          )}
 
-          return (
-            <button
-              className={`kathleen-target ${isFound ? "is-found" : ""}`}
-              key={kathleen.id}
-              type="button"
-              aria-label={
-                isFound
-                  ? `${kathleen.label} found`
-                  : `Find ${kathleen.label}`
-              }
-              onClick={(event) => handleKathleenClick(event, kathleen.id)}
+          {isBackgroundReady && activeHint && (
+            <span
+              className="hint-area"
+              key={activeHint.id}
               style={{
-                left: `${kathleen.x}%`,
-                top: `${kathleen.y}%`,
-                width: `${kathleen.width}%`,
-                "--kathleen-hidden-filter": kathleen.hiddenFilter,
-                "--kathleen-hidden-opacity": kathleen.hiddenOpacity,
-                transform: `translate(-50%, -50%) rotate(${
-                  kathleen.rotation ?? 0
-                }deg)`,
-                zIndex: kathleen.zIndex ?? 2
+                left: `${activeHint.x}%`,
+                top: `${activeHint.y}%`,
+                width: `${activeHint.size}%`
               }}
-            >
-              <img
-                src={kathleen.src}
-                alt={kathleen.label}
-                draggable="false"
-              />
-              {kathleenSparkles.map((sparkle) => (
-                <span className="mini-sparkles" key={sparkle.id}>
-                  <span />
-                  <span />
-                  <span />
-                </span>
-              ))}
-            </button>
-          );
-        })}
+            />
+          )}
 
-        <Celebration active={isComplete} />
+          {isBackgroundReady && visibleKathleens.map((kathleen) => {
+            const isFound = foundIds.has(kathleen.id);
+            const kathleenSparkles = sparkles.filter(
+              (sparkle) => sparkle.kathleenId === kathleen.id
+            );
+
+            return (
+              <button
+                className={`kathleen-target ${isFound ? "is-found" : ""}`}
+                key={kathleen.id}
+                type="button"
+                aria-label={
+                  isFound
+                    ? `${kathleen.label} found`
+                    : `Find ${kathleen.label}`
+                }
+                onClick={(event) => handleKathleenClick(event, kathleen.id)}
+                style={{
+                  left: `${kathleen.x}%`,
+                  top: `${kathleen.y}%`,
+                  width: `${kathleen.width}%`,
+                  "--kathleen-hidden-filter": kathleen.hiddenFilter,
+                  "--kathleen-hidden-opacity": kathleen.hiddenOpacity,
+                  transform: `translate(-50%, -50%) rotate(${
+                    kathleen.rotation ?? 0
+                  }deg)`,
+                  zIndex: kathleen.zIndex ?? 2
+                }}
+              >
+                <img
+                  src={kathleen.src}
+                  alt={kathleen.label}
+                  draggable="false"
+                />
+                {kathleenSparkles.map((sparkle) => (
+                  <span className="mini-sparkles" key={sparkle.id}>
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                ))}
+              </button>
+            );
+          })}
+
+          <Celebration active={isComplete} />
+        </div>
       </div>
 
       {isComplete && (
