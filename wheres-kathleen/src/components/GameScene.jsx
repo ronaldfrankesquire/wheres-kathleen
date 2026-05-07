@@ -19,23 +19,76 @@ function clampPercentage(value, min = 7, max = 93) {
   return Math.min(Math.max(value, min), max);
 }
 
-export default function GameScene({ level }) {
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function randomizeKathleens(level) {
+  const maxOffsetX = level.randomOffsetX ?? 3.4;
+  const maxOffsetY = level.randomOffsetY ?? 2.6;
+
+  return level.kathleens.map((kathleen) => ({
+    ...kathleen,
+    x: clampPercentage(
+      kathleen.x + randomBetween(-maxOffsetX, maxOffsetX),
+      5,
+      95
+    ),
+    y: clampPercentage(
+      kathleen.y + randomBetween(-maxOffsetY, maxOffsetY),
+      6,
+      94
+    ),
+    rotation:
+      (kathleen.rotation ?? 0) +
+      randomBetween(-(level.randomRotation ?? 4), level.randomRotation ?? 4)
+  }));
+}
+
+export default function GameScene({ hasNextLevel = false, level, onNextLevel }) {
+  const [visibleKathleens, setVisibleKathleens] = useState(() =>
+    randomizeKathleens(level)
+  );
   const [foundIds, setFoundIds] = useState(() => new Set());
   const [message, setMessage] = useState(START_MESSAGE);
   const [sparkles, setSparkles] = useState([]);
   const [hintsRemaining, setHintsRemaining] = useState(MAX_HINTS);
   const [hintCountdown, setHintCountdown] = useState(HINT_REGEN_SECONDS);
   const [activeHint, setActiveHint] = useState(null);
+  const [isBackgroundReady, setIsBackgroundReady] = useState(false);
   const hintTimeoutRef = useRef(null);
 
-  const totalCount = level.kathleens.length;
+  const totalCount = visibleKathleens.length;
   const foundCount = foundIds.size;
   const isComplete = foundCount === totalCount;
 
   const kathleenLookup = useMemo(
-    () => new Map(level.kathleens.map((kathleen) => [kathleen.id, kathleen])),
-    [level.kathleens]
+    () => new Map(visibleKathleens.map((kathleen) => [kathleen.id, kathleen])),
+    [visibleKathleens]
   );
+
+  useEffect(() => {
+    setVisibleKathleens(randomizeKathleens(level));
+    setFoundIds(new Set());
+    setSparkles([]);
+    setHintsRemaining(MAX_HINTS);
+    setHintCountdown(HINT_REGEN_SECONDS);
+    setActiveHint(null);
+    setMessage(START_MESSAGE);
+    setIsBackgroundReady(false);
+
+    if (hintTimeoutRef.current) {
+      window.clearTimeout(hintTimeoutRef.current);
+    }
+
+    const backgroundImage = new Image();
+    backgroundImage.onload = () => setIsBackgroundReady(true);
+    backgroundImage.src = level.background;
+
+    return () => {
+      backgroundImage.onload = null;
+    };
+  }, [level]);
 
   useEffect(() => {
     if (isComplete || hintsRemaining >= MAX_HINTS) {
@@ -119,7 +172,7 @@ export default function GameScene({ level }) {
       return;
     }
 
-    const hiddenKathleens = level.kathleens.filter(
+    const hiddenKathleens = visibleKathleens.filter(
       (kathleen) => !foundIds.has(kathleen.id)
     );
 
@@ -155,6 +208,7 @@ export default function GameScene({ level }) {
 
   function handlePlayAgain() {
     setFoundIds(new Set());
+    setVisibleKathleens(randomizeKathleens(level));
     setSparkles([]);
     setHintsRemaining(MAX_HINTS);
     setHintCountdown(HINT_REGEN_SECONDS);
@@ -194,7 +248,9 @@ export default function GameScene({ level }) {
       </p>
 
       <div
-        className={`scene-frame ${isComplete ? "is-complete" : ""}`}
+        className={`scene-frame ${isComplete ? "is-complete" : ""} ${
+          isBackgroundReady ? "is-ready" : "is-loading"
+        }`}
         onClick={handleSceneClick}
         style={{
           "--scene-background-filter": level.backgroundFilter,
@@ -206,9 +262,16 @@ export default function GameScene({ level }) {
           src={level.background}
           alt={`${level.title} seek-and-find scene`}
           draggable="false"
+          onLoad={() => setIsBackgroundReady(true)}
         />
 
-        {activeHint && (
+        {!isBackgroundReady && (
+          <span className="scene-loading" aria-live="polite">
+            Loading scene...
+          </span>
+        )}
+
+        {isBackgroundReady && activeHint && (
           <span
             className="hint-area"
             key={activeHint.id}
@@ -220,7 +283,7 @@ export default function GameScene({ level }) {
           />
         )}
 
-        {level.kathleens.map((kathleen) => {
+        {isBackgroundReady && visibleKathleens.map((kathleen) => {
           const isFound = foundIds.has(kathleen.id);
           const kathleenSparkles = sparkles.filter(
             (sparkle) => sparkle.kathleenId === kathleen.id
@@ -269,13 +332,24 @@ export default function GameScene({ level }) {
       </div>
 
       {isComplete && (
-        <button
-          className="play-again-button"
-          type="button"
-          onClick={handlePlayAgain}
-        >
-          Play again
-        </button>
+        <div className="completion-actions">
+          {hasNextLevel && (
+            <button
+              className="next-level-button"
+              type="button"
+              onClick={onNextLevel}
+            >
+              Next level
+            </button>
+          )}
+          <button
+            className="play-again-button"
+            type="button"
+            onClick={handlePlayAgain}
+          >
+            Play again
+          </button>
+        </div>
       )}
     </section>
   );

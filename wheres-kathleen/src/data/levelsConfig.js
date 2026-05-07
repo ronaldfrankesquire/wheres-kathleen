@@ -29,6 +29,27 @@ const hiddenKathleenTreatment = {
   hiddenOpacity: 0.52
 };
 
+function getLevelDifficultyTreatment(levelIndex) {
+  const opacitySteps = [1, 0.94, 0.88, 0.8, 0.73, 0.67, 0.61, 0.55, 0.5, 0.46, 0.42];
+  const contrastSteps = [1.08, 1.02, 0.96, 0.9, 0.84, 0.8, 0.76, 0.73, 0.71, 0.69, 0.68];
+  const brightnessSteps = [1, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1];
+
+  const hiddenOpacity =
+    opacitySteps[levelIndex] ?? opacitySteps[opacitySteps.length - 1];
+  const contrast =
+    contrastSteps[levelIndex] ?? contrastSteps[contrastSteps.length - 1];
+  const brightness =
+    brightnessSteps[levelIndex] ?? brightnessSteps[brightnessSteps.length - 1];
+
+  return {
+    hiddenFilter: `grayscale(1) contrast(${contrast}) brightness(${brightness})`,
+    hiddenOpacity,
+    randomOffsetX: Number((2.2 + levelIndex * 0.18).toFixed(2)),
+    randomOffsetY: Number((1.8 + levelIndex * 0.14).toFixed(2)),
+    randomRotation: Number((3 + levelIndex * 0.22).toFixed(2))
+  };
+}
+
 function createLevel(levelNumber, placements, options = {}) {
   const { kathleenDefaults, ...levelOptions } = options;
 
@@ -53,6 +74,18 @@ function createLevel(levelNumber, placements, options = {}) {
         zIndex: placement[4] ?? 4
       };
     })
+  };
+}
+
+function renumberLevel(level, levelNumber) {
+  return {
+    ...level,
+    id: `scene-level-${levelNumber}`,
+    title: `Scene Level ${levelNumber}`,
+    kathleens: level.kathleens.map((kathleen, index) => ({
+      ...kathleen,
+      id: `level-${levelNumber}-kathleen-${String(index + 1).padStart(2, "0")}`
+    }))
   };
 }
 
@@ -281,12 +314,19 @@ const levelEleven = createLevel(11, [
   [76.5, 26.3, 4.5, 5, 5]
 ]);
 
-function withHiddenKathleenTreatment(level) {
+function withHiddenKathleenTreatment(level, levelIndex) {
+  const difficultyTreatment = getLevelDifficultyTreatment(levelIndex);
+
   return {
     ...level,
+    randomOffsetX: difficultyTreatment.randomOffsetX,
+    randomOffsetY: difficultyTreatment.randomOffsetY,
+    randomRotation: difficultyTreatment.randomRotation,
     kathleens: level.kathleens.map((kathleen) => ({
       ...kathleen,
-      ...hiddenKathleenTreatment
+      ...hiddenKathleenTreatment,
+      hiddenFilter: difficultyTreatment.hiddenFilter,
+      hiddenOpacity: difficultyTreatment.hiddenOpacity
     }))
   };
 }
@@ -296,11 +336,11 @@ export const levels = [
   levelTwo,
   levelThree,
   levelFour,
-  levelFive,
+  renumberLevel(levelEleven, 5),
   levelSix,
   levelSeven,
   levelEight,
   levelNine,
   levelTen,
-  levelEleven
+  renumberLevel(levelFive, 11)
 ].map(withHiddenKathleenTreatment);
