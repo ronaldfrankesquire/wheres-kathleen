@@ -49,6 +49,55 @@ function decodeImageSource(source) {
   });
 }
 
+function requestFinaleFullscreen() {
+  const fullscreenTarget = document.documentElement;
+  const requestFullscreen =
+    fullscreenTarget.requestFullscreen ??
+    fullscreenTarget.webkitRequestFullscreen;
+
+  if (
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    !requestFullscreen
+  ) {
+    return;
+  }
+
+  try {
+    const fullscreenPromise = requestFullscreen.call(fullscreenTarget, {
+      navigationUI: "hide"
+    });
+
+    if (fullscreenPromise) {
+      fullscreenPromise.catch(() => {});
+    }
+  } catch {
+    // Some browsers expose fullscreen but still reject it; the fixed overlay remains the fallback.
+  }
+}
+
+function exitFinaleFullscreen() {
+  const exitFullscreen =
+    document.exitFullscreen ?? document.webkitExitFullscreen;
+
+  if (
+    !document.fullscreenElement &&
+    !document.webkitFullscreenElement
+  ) {
+    return;
+  }
+
+  if (!exitFullscreen) {
+    return;
+  }
+
+  const exitPromise = exitFullscreen.call(document);
+
+  if (exitPromise) {
+    exitPromise.catch(() => {});
+  }
+}
+
 function clampPercentage(value, min = 7, max = 93) {
   return Math.min(Math.max(value, min), max);
 }
@@ -203,6 +252,7 @@ export default function GameScene({
   const [hintsRemaining, setHintsRemaining] = useState(MAX_HINTS);
   const [hintCountdown, setHintCountdown] = useState(HINT_REGEN_SECONDS);
   const [activeHint, setActiveHint] = useState(null);
+  const [visualViewportStyle, setVisualViewportStyle] = useState({});
   /** loading: decode assets | reveal: fade cover over prepared scene | ready: play */
   const [scenePhase, setScenePhase] = useState("loading");
   const hintTimeoutRef = useRef(null);
@@ -232,6 +282,77 @@ export default function GameScene({
     () => new Map(visibleKathleens.map((kathleen) => [kathleen.id, kathleen])),
     [visibleKathleens]
   );
+
+  useEffect(() => {
+    let animationFrameId = null;
+
+    function updateVisualViewportStyle() {
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+
+        const viewport = window.visualViewport;
+        const viewportWidth = viewport?.width ?? window.innerWidth;
+        const viewportHeight = viewport?.height ?? window.innerHeight;
+        const viewportLeft = viewport?.offsetLeft ?? 0;
+        const viewportTop = viewport?.offsetTop ?? 0;
+
+        document.documentElement.style.setProperty(
+          "--app-viewport-height",
+          `${viewportHeight}px`
+        );
+        setVisualViewportStyle({
+          "--visible-viewport-height": `${viewportHeight}px`,
+          "--visible-viewport-left": `${viewportLeft}px`,
+          "--visible-viewport-top": `${viewportTop}px`,
+          "--visible-viewport-width": `${viewportWidth}px`
+        });
+      });
+    }
+
+    updateVisualViewportStyle();
+
+    window.addEventListener("resize", updateVisualViewportStyle);
+    window.addEventListener("orientationchange", updateVisualViewportStyle);
+    window.visualViewport?.addEventListener("resize", updateVisualViewportStyle);
+    window.visualViewport?.addEventListener("scroll", updateVisualViewportStyle);
+
+    return () => {
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      window.removeEventListener("resize", updateVisualViewportStyle);
+      window.removeEventListener("orientationchange", updateVisualViewportStyle);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        updateVisualViewportStyle
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        updateVisualViewportStyle
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isComplete) {
+      return;
+    }
+
+    document.body.classList.add("is-finale-active");
+
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ left: 0, top: 0, behavior: "smooth" });
+    });
+
+    return () => {
+      document.body.classList.remove("is-finale-active");
+    };
+  }, [isComplete]);
 
   useEffect(() => {
     sceneLoadGenerationRef.current += 1;
@@ -452,6 +573,10 @@ export default function GameScene({
     const kathleen = kathleenLookup.get(kathleenId);
     const willComplete = foundCount + 1 === totalCount;
 
+    if (willComplete) {
+      requestFinaleFullscreen();
+    }
+
     setFoundIds((currentFoundIds) => {
       const nextFoundIds = new Set(currentFoundIds);
       nextFoundIds.add(kathleenId);
@@ -541,6 +666,7 @@ export default function GameScene({
   }
 
   function handlePlayAgain() {
+    exitFinaleFullscreen();
     setFoundIds(new Set());
     setVisibleKathleens(getPlacementMapKathleens(level, placementMapIndex));
     setSparkles([]);
@@ -549,6 +675,11 @@ export default function GameScene({
     setActiveHint(null);
     setMessage(START_MESSAGE);
     onRestartLevel?.();
+  }
+
+  function handleNextLevelClick() {
+    exitFinaleFullscreen();
+    onNextLevel?.();
   }
 
   return (
@@ -701,39 +832,43 @@ export default function GameScene({
           )}
 
           <Celebration active={isComplete} />
-
-          {isComplete && level.completionKathleen && (
-            <div className="finale-kathleen" aria-hidden="true">
-              <img
-                src={level.completionKathleen.src}
-                alt=""
-                draggable="false"
-              />
-            </div>
-          )}
-
-          {isComplete && (
-            <div className="completion-actions">
-              <button
-                className="play-again-button"
-                type="button"
-                onClick={handlePlayAgain}
-              >
-                Play again
-              </button>
-              {hasNextLevel && (
-                <button
-                  className="next-level-button"
-                  type="button"
-                  onClick={onNextLevel}
-                >
-                  Next level
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </div>
+
+      {isComplete && level.completionKathleen && (
+        <div
+          className="finale-kathleen"
+          aria-hidden="true"
+          style={visualViewportStyle}
+        >
+          <img
+            src={level.completionKathleen.src}
+            alt=""
+            draggable="false"
+          />
+        </div>
+      )}
+
+      {isComplete && (
+        <div className="completion-actions" style={visualViewportStyle}>
+          <button
+            className="play-again-button"
+            type="button"
+            onClick={handlePlayAgain}
+          >
+            Play again
+          </button>
+          {hasNextLevel && (
+            <button
+              className="next-level-button"
+              type="button"
+              onClick={handleNextLevelClick}
+            >
+              Next level
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

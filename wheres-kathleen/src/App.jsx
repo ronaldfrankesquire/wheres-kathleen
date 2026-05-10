@@ -7,8 +7,46 @@ const BACKGROUND_TRACK_SRC =
   "/assets/audio/audiocoffee-kid-background-110768.mp3";
 const BACKGROUND_TRACK_VOLUME = 0.28;
 const PLACEMENT_MAP_COUNT = 5;
+const PLACEMENT_MAP_STORAGE_KEY = "wheres-kathleen-placement-offsets";
+
+function getLaunchPlacementMapOffsets() {
+  const fallbackOffsets = Object.fromEntries(
+    levels.map((level) => [
+      level.id,
+      Math.floor(Math.random() * PLACEMENT_MAP_COUNT)
+    ])
+  );
+
+  try {
+    const previousOffsets = JSON.parse(
+      window.localStorage.getItem(PLACEMENT_MAP_STORAGE_KEY) ?? "{}"
+    );
+    const nextOffsets = Object.fromEntries(
+      levels.map((level) => {
+        const previousOffset = Number(previousOffsets[level.id]);
+        const randomStep =
+          1 + Math.floor(Math.random() * (PLACEMENT_MAP_COUNT - 1));
+        const nextOffset = Number.isInteger(previousOffset)
+          ? (previousOffset + randomStep) % PLACEMENT_MAP_COUNT
+          : Math.floor(Math.random() * PLACEMENT_MAP_COUNT);
+
+        return [level.id, nextOffset];
+      })
+    );
+
+    window.localStorage.setItem(
+      PLACEMENT_MAP_STORAGE_KEY,
+      JSON.stringify(nextOffsets)
+    );
+
+    return nextOffsets;
+  } catch {
+    return fallbackOffsets;
+  }
+}
 
 export default function App() {
+  const [placementMapOffsets] = useState(getLaunchPlacementMapOffsets);
   const [currentLevelId, setCurrentLevelId] = useState("scene-level-1");
   const [levelPlayCounts, setLevelPlayCounts] = useState({});
   const [isHomeOpen, setIsHomeOpen] = useState(true);
@@ -24,7 +62,9 @@ export default function App() {
     levels[currentLevelIndex >= 0 ? currentLevelIndex : 0] ?? levels[0];
   const nextLevel = levels[currentLevelIndex + 1];
   const currentPlacementMapIndex =
-    (levelPlayCounts[currentLevel.id] ?? 0) % PLACEMENT_MAP_COUNT;
+    ((levelPlayCounts[currentLevel.id] ?? 0) +
+      (placementMapOffsets[currentLevel.id] ?? 0)) %
+    PLACEMENT_MAP_COUNT;
 
   function startLevel(levelId) {
     setIsHomeOpen(false);
@@ -38,7 +78,7 @@ export default function App() {
   function playBackgroundMusic() {
     const backgroundMusic = backgroundMusicRef.current;
 
-    if (!backgroundMusic || !isMusicOn || isLevelComplete) {
+    if (!backgroundMusic || !isMusicOn) {
       return;
     }
 
@@ -52,7 +92,12 @@ export default function App() {
   }
 
   function handleEnterGame() {
+    setIsLevelComplete(false);
     setIsHomeOpen(false);
+    playBackgroundMusic();
+  }
+
+  function handlePlayPressStart() {
     playBackgroundMusic();
   }
 
@@ -68,6 +113,7 @@ export default function App() {
     }
 
     backgroundMusic.volume = BACKGROUND_TRACK_VOLUME;
+    backgroundMusic.load();
 
     return undefined;
   }, []);
@@ -78,18 +124,42 @@ export default function App() {
       return undefined;
     }
 
-    function handleFirstInteraction() {
+    function handleFirstAudioGesture() {
       playBackgroundMusic();
     }
 
-    window.addEventListener("pointerdown", handleFirstInteraction, {
+    window.addEventListener("pointerdown", handleFirstAudioGesture, {
+      capture: true,
       once: true
     });
-    window.addEventListener("keydown", handleFirstInteraction, { once: true });
+    window.addEventListener("click", handleFirstAudioGesture, {
+      capture: true,
+      once: true
+    });
+    window.addEventListener("touchstart", handleFirstAudioGesture, {
+      capture: true,
+      once: true
+    });
+    window.addEventListener("keydown", handleFirstAudioGesture, {
+      capture: true,
+      once: true
+    });
+
+    playBackgroundMusic();
 
     return () => {
-      window.removeEventListener("pointerdown", handleFirstInteraction);
-      window.removeEventListener("keydown", handleFirstInteraction);
+      window.removeEventListener("pointerdown", handleFirstAudioGesture, {
+        capture: true
+      });
+      window.removeEventListener("click", handleFirstAudioGesture, {
+        capture: true
+      });
+      window.removeEventListener("touchstart", handleFirstAudioGesture, {
+        capture: true
+      });
+      window.removeEventListener("keydown", handleFirstAudioGesture, {
+        capture: true
+      });
     };
   }, [isMusicOn]);
 
@@ -128,15 +198,17 @@ export default function App() {
   }, [currentLevel, currentLevelIndex, nextLevel]);
 
   useEffect(() => {
-    if (isMusicOn && !isLevelComplete) {
+    if (isMusicOn) {
       playBackgroundMusic();
       return undefined;
     }
 
-    backgroundMusicRef.current?.pause();
+    if (!isMusicOn) {
+      backgroundMusicRef.current?.pause();
+    }
 
     return undefined;
-  }, [currentLevel.id, isLevelComplete, isMusicOn]);
+  }, [currentLevel.id, isHomeOpen, isLevelComplete, isMusicOn]);
 
   function handleMusicToggle() {
     const backgroundMusic = backgroundMusicRef.current;
@@ -155,10 +227,6 @@ export default function App() {
     setIsMusicOn(true);
     backgroundMusic.volume = BACKGROUND_TRACK_VOLUME;
 
-    if (isLevelComplete) {
-      return;
-    }
-
     const playPromise = backgroundMusic.play();
 
     if (playPromise) {
@@ -175,11 +243,6 @@ export default function App() {
 
     setIsLevelComplete(true);
 
-    if (backgroundMusic) {
-      backgroundMusic.pause();
-      backgroundMusic.currentTime = 0;
-    }
-
     if (isSoundEffectsOn) {
       playWinSound();
     }
@@ -195,7 +258,9 @@ export default function App() {
       <audio
         ref={backgroundMusicRef}
         src={BACKGROUND_TRACK_SRC}
+        autoPlay
         loop
+        playsInline
         preload="auto"
       />
 
@@ -213,6 +278,7 @@ export default function App() {
               <button
                 className="title-play-button"
                 type="button"
+                onPointerDown={handlePlayPressStart}
                 onClick={handleEnterGame}
               >
                 Play
