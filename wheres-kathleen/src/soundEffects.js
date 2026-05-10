@@ -1,5 +1,25 @@
 let audioContext;
 
+const FOUND_SOUND_SRC = "/assets/audio/liecio-collect-points-190037.mp3";
+const MISS_SOUND_SRC = "/assets/audio/freesound_community-wrong-47985.mp3";
+const WIN_SOUND_SRC =
+  "/assets/audio/freesound_community-piglevelwin2mp3-14800.mp3";
+
+function playAudioFile(src, volume = 0.42) {
+  if (typeof Audio === "undefined") {
+    return;
+  }
+
+  const audio = new Audio(src);
+  audio.volume = volume;
+
+  const playPromise = audio.play();
+
+  if (playPromise) {
+    playPromise.catch(() => {});
+  }
+}
+
 function getAudioContext() {
   if (typeof window === "undefined") {
     return null;
@@ -46,12 +66,11 @@ function playTone({ frequency, duration, delay = 0, type = "sine", volume = 0.08
 }
 
 export function playFoundSound() {
-  playTone({ frequency: 660, duration: 0.12, type: "triangle", volume: 0.07 });
-  playTone({ frequency: 990, duration: 0.16, delay: 0.07, type: "triangle", volume: 0.06 });
+  playAudioFile(FOUND_SOUND_SRC, 0.46);
 }
 
 export function playMissSound() {
-  playTone({ frequency: 180, duration: 0.1, type: "sine", volume: 0.035 });
+  playAudioFile(MISS_SOUND_SRC, 0.38);
 }
 
 export function playHintSound() {
@@ -60,13 +79,5 @@ export function playHintSound() {
 }
 
 export function playWinSound() {
-  [523, 659, 784, 1047, 1319].forEach((frequency, index) => {
-    playTone({
-      frequency,
-      duration: 0.22,
-      delay: index * 0.09,
-      type: "triangle",
-      volume: 0.065
-    });
-  });
+  playAudioFile(WIN_SOUND_SRC, 0.5);
 }

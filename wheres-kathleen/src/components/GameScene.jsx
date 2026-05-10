@@ -4,8 +4,7 @@ import ProgressBar from "./ProgressBar.jsx";
 import {
   playFoundSound,
   playHintSound,
-  playMissSound,
-  playWinSound
+  playMissSound
 } from "../soundEffects.js";
 
 const EMPTY_SPACE_MESSAGE = "Not there... keep looking!";
@@ -14,40 +13,162 @@ const START_MESSAGE = "Tap the hidden Kathleens when you spot them.";
 const MAX_HINTS = 3;
 const HINT_REGEN_SECONDS = 30;
 const HINT_VISIBLE_MS = 5200;
+const PLACEMENT_MAP_COUNT = 5;
+const COLLISION_RESOLUTION_PASSES = 10;
+const PLACEMENT_MAP_RECIPES = [
+  { multiplier: 1, shift: 0 },
+  { multiplier: 7, shift: 4 },
+  { multiplier: 13, shift: 9 },
+  { multiplier: 3, shift: 8 },
+  { multiplier: 17, shift: 15 }
+];
 
 function clampPercentage(value, min = 7, max = 93) {
   return Math.min(Math.max(value, min), max);
 }
 
-function randomBetween(min, max) {
-  return min + Math.random() * (max - min);
+function getMovedPlacementSlot(slot, mapIndex, seed) {
+  const waveX = Math.sin(seed * 1.19) * 6.8;
+  const waveY = Math.cos(seed * 1.41) * 5.2;
+  const centerX = slot.x - 50;
+  const centerY = slot.y - 50;
+
+  switch (mapIndex) {
+    case 1:
+      return {
+        x: 100 - slot.x + waveX,
+        y: slot.y + waveY
+      };
+    case 2:
+      return {
+        x: slot.x + waveX,
+        y: 100 - slot.y + waveY
+      };
+    case 3:
+      return {
+        x: 100 - slot.x + waveX,
+        y: 100 - slot.y + waveY
+      };
+    case 4:
+      return {
+        x: 50 + centerY * 1.18 + waveX,
+        y: 50 - centerX * 0.72 + waveY
+      };
+    default:
+      return {
+        x: slot.x,
+        y: slot.y
+      };
+  }
 }
 
-function randomizeKathleens(level) {
-  const maxOffsetX = level.randomOffsetX ?? 3.4;
-  const maxOffsetY = level.randomOffsetY ?? 2.6;
-
-  return level.kathleens.map((kathleen) => ({
-    ...kathleen,
-    x: clampPercentage(
-      kathleen.x + randomBetween(-maxOffsetX, maxOffsetX),
-      5,
-      95
-    ),
-    y: clampPercentage(
-      kathleen.y + randomBetween(-maxOffsetY, maxOffsetY),
-      6,
-      94
-    ),
-    rotation:
-      (kathleen.rotation ?? 0) +
-      randomBetween(-(level.randomRotation ?? 4), level.randomRotation ?? 4)
-  }));
+function getMinimumKathleenDistance(firstKathleen, secondKathleen) {
+  return Math.max(
+    8,
+    (firstKathleen.width + secondKathleen.width) * 0.82
+  );
 }
 
-export default function GameScene({ hasNextLevel = false, level, onNextLevel }) {
+function spreadOverlappingKathleens(kathleens) {
+  const spreadKathleens = kathleens.map((kathleen) => ({ ...kathleen }));
+
+  for (let pass = 0; pass < COLLISION_RESOLUTION_PASSES; pass += 1) {
+    for (let firstIndex = 0; firstIndex < spreadKathleens.length; firstIndex += 1) {
+      for (
+        let secondIndex = firstIndex + 1;
+        secondIndex < spreadKathleens.length;
+        secondIndex += 1
+      ) {
+        const firstKathleen = spreadKathleens[firstIndex];
+        const secondKathleen = spreadKathleens[secondIndex];
+        let deltaX = secondKathleen.x - firstKathleen.x;
+        let deltaY = secondKathleen.y - firstKathleen.y;
+        let distance = Math.hypot(deltaX, deltaY);
+        const minimumDistance = getMinimumKathleenDistance(
+          firstKathleen,
+          secondKathleen
+        );
+
+        if (distance >= minimumDistance) {
+          continue;
+        }
+
+        if (distance < 0.01) {
+          const angle = (firstIndex + secondIndex + pass + 1) * 2.399;
+          deltaX = Math.cos(angle);
+          deltaY = Math.sin(angle);
+          distance = 1;
+        }
+
+        const pushDistance = (minimumDistance - distance) / 2;
+        const pushX = (deltaX / distance) * pushDistance;
+        const pushY = (deltaY / distance) * pushDistance;
+
+        firstKathleen.x = clampPercentage(firstKathleen.x - pushX, 5, 95);
+        firstKathleen.y = clampPercentage(firstKathleen.y - pushY, 6, 94);
+        secondKathleen.x = clampPercentage(secondKathleen.x + pushX, 5, 95);
+        secondKathleen.y = clampPercentage(secondKathleen.y + pushY, 6, 94);
+      }
+    }
+  }
+
+  return spreadKathleens;
+}
+
+function getPlacementMapKathleens(level, placementMapIndex = 0) {
+  const normalizedMapIndex =
+    ((placementMapIndex % PLACEMENT_MAP_COUNT) + PLACEMENT_MAP_COUNT) %
+    PLACEMENT_MAP_COUNT;
+  const recipe = PLACEMENT_MAP_RECIPES[normalizedMapIndex];
+  const maxOffsetX = (level.randomOffsetX ?? 3.4) * 0.24;
+  const maxOffsetY = (level.randomOffsetY ?? 2.6) * 0.24;
+  const maxRotation = (level.randomRotation ?? 4) * 0.6;
+  const placementCount = level.kathleens.length;
+
+  const mappedKathleens = level.kathleens.map((kathleen, index) => {
+    const placementSlot =
+      level.kathleens[
+        (index * recipe.multiplier + recipe.shift) % placementCount
+      ];
+    const seed = (index + 1) * (normalizedMapIndex + 2);
+    const movedSlot = getMovedPlacementSlot(
+      placementSlot,
+      normalizedMapIndex,
+      seed
+    );
+    const offsetX =
+      normalizedMapIndex === 0 ? 0 : Math.sin(seed * 1.73) * maxOffsetX;
+    const offsetY =
+      normalizedMapIndex === 0 ? 0 : Math.cos(seed * 1.37) * maxOffsetY;
+    const rotationOffset =
+      normalizedMapIndex === 0
+        ? 0
+        : Math.sin(seed * 2.11 + normalizedMapIndex) * maxRotation;
+
+    return {
+      ...kathleen,
+      x: clampPercentage(movedSlot.x + offsetX, 5, 95),
+      y: clampPercentage(movedSlot.y + offsetY, 6, 94),
+      width: placementSlot.width,
+      rotation: (placementSlot.rotation ?? 0) + rotationOffset,
+      zIndex: placementSlot.zIndex ?? kathleen.zIndex
+    };
+  });
+
+  return spreadOverlappingKathleens(mappedKathleens);
+}
+
+export default function GameScene({
+  hasNextLevel = false,
+  level,
+  onLevelComplete,
+  onNextLevel,
+  onRestartLevel,
+  placementMapIndex = 0,
+  soundEffectsOn = true
+}) {
   const [visibleKathleens, setVisibleKathleens] = useState(() =>
-    randomizeKathleens(level)
+    getPlacementMapKathleens(level, placementMapIndex)
   );
   const [foundIds, setFoundIds] = useState(() => new Set());
   const [message, setMessage] = useState(START_MESSAGE);
@@ -61,6 +182,14 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
   const totalCount = visibleKathleens.length;
   const foundCount = foundIds.size;
   const isComplete = foundCount === totalCount;
+  const hintRechargeProgress =
+    isComplete || hintsRemaining >= MAX_HINTS
+      ? 1
+      : (HINT_REGEN_SECONDS - hintCountdown) / HINT_REGEN_SECONDS;
+  const hintFillPercent = Math.min(
+    100,
+    ((hintsRemaining + hintRechargeProgress) / MAX_HINTS) * 100
+  );
 
   const kathleenLookup = useMemo(
     () => new Map(visibleKathleens.map((kathleen) => [kathleen.id, kathleen])),
@@ -68,7 +197,7 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
   );
 
   useEffect(() => {
-    setVisibleKathleens(randomizeKathleens(level));
+    setVisibleKathleens(getPlacementMapKathleens(level, placementMapIndex));
     setFoundIds(new Set());
     setSparkles([]);
     setHintsRemaining(MAX_HINTS);
@@ -88,7 +217,7 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
     return () => {
       backgroundImage.onload = null;
     };
-  }, [level]);
+  }, [level, placementMapIndex]);
 
   useEffect(() => {
     if (isComplete || hintsRemaining >= MAX_HINTS) {
@@ -137,10 +266,12 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
 
     if (willComplete) {
       setMessage(COMPLETE_MESSAGE);
-      playWinSound();
+      onLevelComplete?.();
     } else {
       setMessage(`${kathleen?.label ?? "Kathleen"} found!`);
-      playFoundSound();
+      if (soundEffectsOn) {
+        playFoundSound();
+      }
     }
 
     setActiveHint((currentHint) =>
@@ -163,7 +294,9 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
   function handleSceneClick() {
     if (!isComplete) {
       setMessage(EMPTY_SPACE_MESSAGE);
-      playMissSound();
+      if (soundEffectsOn) {
+        playMissSound();
+      }
     }
   }
 
@@ -195,7 +328,9 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
       size: hintSize
     });
     setMessage("A little magic is pointing near something...");
-    playHintSound();
+    if (soundEffectsOn) {
+      playHintSound();
+    }
 
     if (hintTimeoutRef.current) {
       window.clearTimeout(hintTimeoutRef.current);
@@ -208,18 +343,18 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
 
   function handlePlayAgain() {
     setFoundIds(new Set());
-    setVisibleKathleens(randomizeKathleens(level));
+    setVisibleKathleens(getPlacementMapKathleens(level, placementMapIndex));
     setSparkles([]);
     setHintsRemaining(MAX_HINTS);
     setHintCountdown(HINT_REGEN_SECONDS);
     setActiveHint(null);
     setMessage(START_MESSAGE);
+    onRestartLevel?.();
   }
 
   return (
     <section className="game-layout">
       <header className="game-header">
-        <p className="level-title">{level.title}</p>
         <h1>Where&apos;s Kathleen?</h1>
       </header>
 
@@ -229,18 +364,26 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
         <button
           className="hint-button"
           type="button"
+          aria-label={
+            hintsRemaining < MAX_HINTS && !isComplete
+              ? `Hint ${hintsRemaining} of ${MAX_HINTS}. Recharging.`
+              : `Hint ${hintsRemaining} of ${MAX_HINTS}`
+          }
           disabled={hintsRemaining === 0 || isComplete}
           onClick={handleHintClick}
+          style={{ "--hint-fill": `${hintFillPercent}%` }}
         >
-          Hint {hintsRemaining} / {MAX_HINTS}
+          <span className="hint-button-label">
+            Hint {hintsRemaining} / {MAX_HINTS}
+          </span>
         </button>
-        <span className="hint-status" aria-live="polite">
-          {isComplete
-            ? "All found"
-            : hintsRemaining < MAX_HINTS
-              ? `Next hint in ${hintCountdown}s`
-              : "Hints ready"}
-        </span>
+        <button
+          className="replay-button"
+          type="button"
+          onClick={handlePlayAgain}
+        >
+          Replay
+        </button>
       </div>
 
       <p className={`game-message ${isComplete ? "is-complete" : ""}`}>
@@ -330,29 +473,39 @@ export default function GameScene({ hasNextLevel = false, level, onNextLevel }) 
           })}
 
           <Celebration active={isComplete} />
+
+          {isComplete && level.completionKathleen && (
+            <div className="finale-kathleen" aria-hidden="true">
+              <img
+                src={level.completionKathleen.src}
+                alt=""
+                draggable="false"
+              />
+            </div>
+          )}
+
+          {isComplete && (
+            <div className="completion-actions">
+              <button
+                className="play-again-button"
+                type="button"
+                onClick={handlePlayAgain}
+              >
+                Play again
+              </button>
+              {hasNextLevel && (
+                <button
+                  className="next-level-button"
+                  type="button"
+                  onClick={onNextLevel}
+                >
+                  Next level
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {isComplete && (
-        <div className="completion-actions">
-          {hasNextLevel && (
-            <button
-              className="next-level-button"
-              type="button"
-              onClick={onNextLevel}
-            >
-              Next level
-            </button>
-          )}
-          <button
-            className="play-again-button"
-            type="button"
-            onClick={handlePlayAgain}
-          >
-            Play again
-          </button>
-        </div>
-      )}
     </section>
   );
 }

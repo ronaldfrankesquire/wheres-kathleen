@@ -10,12 +10,12 @@ const kathleenAssets = [
   ["Kathleen with Teddy", "/assets/kathleens/6. with Teddy.png"],
   ["Reading Kathleen", "/assets/kathleens/7. Reading.png"],
   ["Party Hat Kathleen", "/assets/kathleens/8. Party Hat.png"],
-  ["Side Sit Kathleen", "/assets/kathleens/9. Side Sit.png"],
-  ["Side Stand Kathleen", "/assets/kathleens/10. Side Stand.png"],
-  ["Back Stand Kathleen", "/assets/kathleens/11. Back Stand.png"],
+  ["Sitting Sideways Kathleen", "/assets/kathleens/9. Sitting Sideways.png"],
+  ["Standing Sideways Kathleen", "/assets/kathleens/Standing Sideways.png"],
+  ["Standing Backwards Kathleen", "/assets/kathleens/Standing Backwards.png"],
   ["Cheering Kathleen", "/assets/kathleens/12. Cheering.png"],
-  ["Thinking Sit Kathleen", "/assets/kathleens/13. Thinking Sit.png"],
-  ["Thinking Stand Kathleen", "/assets/kathleens/14. Thinking Stand.png"],
+  ["Sitting Thinking Kathleen", "/assets/kathleens/Sitting Thinking.png"],
+  ["Standing Thinking Kathleen", "/assets/kathleens/Standing Thinking.png"],
   ["Jumping Kathleen", "/assets/kathleens/15. Jumping.png"],
   ["Mini Heart Kathleen", "/assets/kathleens/16. Mini Heart.png"],
   ["Thumbs Up Kathleen", "/assets/kathleens/17. Thumbs Up.png"],
@@ -24,10 +24,38 @@ const kathleenAssets = [
   ["Heart Kathleen", "/assets/kathleens/20. Heart.png"]
 ];
 
+const completionKathleenAssets = [
+  ["Standing Kathleen", "/assets/kathleens/1. Standing.png"],
+  ["Waving Kathleen", "/assets/kathleens/2. Waving.png"],
+  ["Crouching Kathleen", "/assets/kathleens/4. Crouching.png"],
+  ["Sitting Kathleen", "/assets/kathleens/5. Sitting.png"],
+  ["Kathleen with Teddy", "/assets/kathleens/6. with Teddy.png"],
+  ["Reading Kathleen", "/assets/kathleens/7. Reading.png"],
+  ["Party Hat Kathleen", "/assets/kathleens/8. Party Hat.png"],
+  ["Cheering Kathleen", "/assets/kathleens/12. Cheering.png"],
+  ["Sitting Thinking Kathleen", "/assets/kathleens/Sitting Thinking.png"],
+  ["Standing Thinking Kathleen", "/assets/kathleens/Standing Thinking.png"],
+  ["Thumbs Up Kathleen", "/assets/kathleens/17. Thumbs Up.png"]
+];
+
 const hiddenKathleenTreatment = {
   hiddenFilter: "grayscale(1) contrast(0.7) brightness(1.08)",
   hiddenOpacity: 0.52
 };
+
+const playableLevelTitles = [
+  "Toy Joy Factory",
+  "Candy Cloud Kitchen",
+  "Joyland Playground",
+  "Space Toy Rocket Room",
+  "Robot Workshop",
+  "Jungle Toy Adventure",
+  "Plush Ocean Play World",
+  "Happy Birthday",
+  "Story Time Every Day",
+  "Monster Slumber Party",
+  "Monster Hugs Welcome"
+];
 
 function getLevelDifficultyTreatment(levelIndex) {
   const opacitySteps = [1, 0.94, 0.88, 0.8, 0.73, 0.67, 0.61, 0.55, 0.5, 0.46, 0.42];
@@ -331,7 +359,20 @@ function withHiddenKathleenTreatment(level, levelIndex) {
   };
 }
 
-export const levels = [
+function withCompletionKathleen(level, levelIndex) {
+  const [label, src] =
+    completionKathleenAssets[levelIndex % completionKathleenAssets.length];
+
+  return {
+    ...level,
+    completionKathleen: {
+      label,
+      src
+    }
+  };
+}
+
+const playableLevels = [
   levelOne,
   levelTwo,
   levelThree,
@@ -343,4 +384,14 @@ export const levels = [
   levelNine,
   levelTen,
   renumberLevel(levelFive, 11)
-].map(withHiddenKathleenTreatment);
+];
+
+export const levels = playableLevels.map((level, levelIndex) =>
+  withCompletionKathleen(
+    {
+      ...withHiddenKathleenTreatment(level, levelIndex),
+      title: playableLevelTitles[levelIndex] ?? level.title
+    },
+    levelIndex
+  )
+);
