@@ -13,7 +13,9 @@ const START_MESSAGE = "Tap the hidden Kathleens when you spot them.";
 const MAX_HINTS = 3;
 const HINT_REGEN_SECONDS = 30;
 const HINT_VISIBLE_MS = 5200;
+const MIN_SCENE_LOADING_MS = 950;
 const PLACEMENT_MAP_COUNT = 5;
+const SCENE_REVEAL_MS = 520;
 const COLLISION_RESOLUTION_PASSES = 10;
 const PLACEMENT_MAP_RECIPES = [
   { multiplier: 1, shift: 0 },
@@ -22,6 +24,30 @@ const PLACEMENT_MAP_RECIPES = [
   { multiplier: 3, shift: 8 },
   { multiplier: 17, shift: 15 }
 ];
+
+function decodeImageSource(source) {
+  return new Promise((resolve) => {
+    const image = new Image();
+
+    function finish() {
+      if (image.decode) {
+        image.decode().then(resolve, resolve);
+        return;
+      }
+
+      resolve();
+    }
+
+    image.onload = finish;
+    image.onerror = resolve;
+    image.decoding = "async";
+    image.src = source;
+
+    if (image.complete && image.naturalWidth > 0) {
+      finish();
+    }
+  });
+}
 
 function clampPercentage(value, min = 7, max = 93) {
   return Math.min(Math.max(value, min), max);
@@ -160,6 +186,7 @@ function getPlacementMapKathleens(level, placementMapIndex = 0) {
 
 export default function GameScene({
   hasNextLevel = false,
+  isActive = true,
   level,
   onLevelComplete,
   onNextLevel,
@@ -176,8 +203,18 @@ export default function GameScene({
   const [hintsRemaining, setHintsRemaining] = useState(MAX_HINTS);
   const [hintCountdown, setHintCountdown] = useState(HINT_REGEN_SECONDS);
   const [activeHint, setActiveHint] = useState(null);
-  const [isBackgroundReady, setIsBackgroundReady] = useState(false);
+  /** loading: decode assets | reveal: fade cover over prepared scene | ready: play */
+  const [scenePhase, setScenePhase] = useState("loading");
   const hintTimeoutRef = useRef(null);
+  const minLoadingTimeoutRef = useRef(null);
+  const revealFallbackTimeoutRef = useRef(null);
+  const loadingOverlayRef = useRef(null);
+  const sceneBackgroundImgRef = useRef(null);
+  /** Bumped on each level/placement reset so stale decode/onLoad callbacks are ignored. */
+  const sceneLoadGenerationRef = useRef(0);
+  const loadingStartedAtRef = useRef(Date.now());
+  const isActiveRef = useRef(isActive);
+  const backgroundSourceRef = useRef(level.background);
 
   const totalCount = visibleKathleens.length;
   const foundCount = foundIds.size;
@@ -197,6 +234,9 @@ export default function GameScene({
   );
 
   useEffect(() => {
+    sceneLoadGenerationRef.current += 1;
+    loadingStartedAtRef.current = Date.now();
+    backgroundSourceRef.current = level.background;
     setVisibleKathleens(getPlacementMapKathleens(level, placementMapIndex));
     setFoundIds(new Set());
     setSparkles([]);
@@ -204,20 +244,61 @@ export default function GameScene({
     setHintCountdown(HINT_REGEN_SECONDS);
     setActiveHint(null);
     setMessage(START_MESSAGE);
-    setIsBackgroundReady(false);
+    setScenePhase("loading");
 
     if (hintTimeoutRef.current) {
       window.clearTimeout(hintTimeoutRef.current);
     }
+    if (minLoadingTimeoutRef.current) {
+      window.clearTimeout(minLoadingTimeoutRef.current);
+      minLoadingTimeoutRef.current = null;
+    }
+    if (revealFallbackTimeoutRef.current) {
+      window.clearTimeout(revealFallbackTimeoutRef.current);
+      revealFallbackTimeoutRef.current = null;
+    }
 
-    const backgroundImage = new Image();
-    backgroundImage.onload = () => setIsBackgroundReady(true);
-    backgroundImage.src = level.background;
-
-    return () => {
-      backgroundImage.onload = null;
-    };
+    const img = sceneBackgroundImgRef.current;
+    if (
+      img &&
+      img.getAttribute("src") === backgroundSourceRef.current &&
+      img.complete &&
+      img.naturalWidth > 0
+    ) {
+      handleBackgroundReady({ currentTarget: img });
+    }
   }, [level, placementMapIndex]);
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+
+    if (!isActive) {
+      setScenePhase("loading");
+      if (minLoadingTimeoutRef.current) {
+        window.clearTimeout(minLoadingTimeoutRef.current);
+        minLoadingTimeoutRef.current = null;
+      }
+      if (revealFallbackTimeoutRef.current) {
+        window.clearTimeout(revealFallbackTimeoutRef.current);
+        revealFallbackTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    sceneLoadGenerationRef.current += 1;
+    loadingStartedAtRef.current = Date.now();
+    setScenePhase("loading");
+
+    const img = sceneBackgroundImgRef.current;
+    if (
+      img &&
+      img.getAttribute("src") === backgroundSourceRef.current &&
+      img.complete &&
+      img.naturalWidth > 0
+    ) {
+      handleBackgroundReady({ currentTarget: img });
+    }
+  }, [isActive]);
 
   useEffect(() => {
     if (isComplete || hintsRemaining >= MAX_HINTS) {
@@ -244,11 +325,125 @@ export default function GameScene({
       if (hintTimeoutRef.current) {
         window.clearTimeout(hintTimeoutRef.current);
       }
+      if (minLoadingTimeoutRef.current) {
+        window.clearTimeout(minLoadingTimeoutRef.current);
+      }
+      if (revealFallbackTimeoutRef.current) {
+        window.clearTimeout(revealFallbackTimeoutRef.current);
+      }
     };
   }, []);
 
+  function clearRevealFallback() {
+    if (revealFallbackTimeoutRef.current) {
+      window.clearTimeout(revealFallbackTimeoutRef.current);
+      revealFallbackTimeoutRef.current = null;
+    }
+  }
+
+  function finishRevealToReady() {
+    setScenePhase((current) => (current === "reveal" ? "ready" : current));
+    clearRevealFallback();
+  }
+
+  function handleRevealOverlayTransitionEnd(event) {
+    if (event.propertyName !== "opacity") {
+      return;
+    }
+    if (event.target !== loadingOverlayRef.current) {
+      return;
+    }
+    finishRevealToReady();
+  }
+
+  function handleBackgroundReady(event) {
+    const backgroundImage = event.currentTarget;
+    const backgroundSource = backgroundImage.getAttribute("src");
+    const loadGeneration = sceneLoadGenerationRef.current;
+
+    function afterAssetsDecoded() {
+      if (backgroundSource !== backgroundSourceRef.current) {
+        return;
+      }
+      if (sceneLoadGenerationRef.current !== loadGeneration) {
+        return;
+      }
+      if (!isActiveRef.current) {
+        return;
+      }
+
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (reduceMotion) {
+        const remainingLoadingTime = Math.max(
+          0,
+          MIN_SCENE_LOADING_MS - (Date.now() - loadingStartedAtRef.current)
+        );
+
+        minLoadingTimeoutRef.current = window.setTimeout(() => {
+          if (
+            backgroundSource === backgroundSourceRef.current &&
+            sceneLoadGenerationRef.current === loadGeneration &&
+            isActiveRef.current
+          ) {
+            setScenePhase("ready");
+          }
+        }, remainingLoadingTime);
+        return;
+      }
+
+      function startReveal() {
+        if (backgroundSource !== backgroundSourceRef.current) {
+          return;
+        }
+        setScenePhase("reveal");
+        clearRevealFallback();
+        revealFallbackTimeoutRef.current = window.setTimeout(() => {
+          finishRevealToReady();
+        }, SCENE_REVEAL_MS + 120);
+      }
+
+      const remainingLoadingTime = Math.max(
+        0,
+        MIN_SCENE_LOADING_MS - (Date.now() - loadingStartedAtRef.current)
+      );
+
+      if (minLoadingTimeoutRef.current) {
+        window.clearTimeout(minLoadingTimeoutRef.current);
+      }
+
+      minLoadingTimeoutRef.current = window.setTimeout(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(startReveal);
+        });
+      }, remainingLoadingTime);
+    }
+
+    function afterBackgroundDecoded() {
+      Promise.all(
+        visibleKathleens.map((kathleen) => decodeImageSource(kathleen.src))
+      )
+        .then(afterAssetsDecoded, afterAssetsDecoded);
+    }
+
+    if (backgroundImage.decode) {
+      backgroundImage
+        .decode()
+        .then(afterBackgroundDecoded, afterBackgroundDecoded);
+      return;
+    }
+
+    afterBackgroundDecoded();
+  }
+
   function handleKathleenClick(event, kathleenId) {
     event.stopPropagation();
+
+    if (scenePhase !== "ready") {
+      return;
+    }
 
     if (foundIds.has(kathleenId)) {
       return;
@@ -292,6 +487,10 @@ export default function GameScene({
   }
 
   function handleSceneClick() {
+    if (scenePhase !== "ready") {
+      return;
+    }
+
     if (!isComplete) {
       setMessage(EMPTY_SPACE_MESSAGE);
       if (soundEffectsOn) {
@@ -301,7 +500,7 @@ export default function GameScene({
   }
 
   function handleHintClick() {
-    if (hintsRemaining <= 0 || isComplete) {
+    if (scenePhase !== "ready" || hintsRemaining <= 0 || isComplete) {
       return;
     }
 
@@ -369,7 +568,9 @@ export default function GameScene({
               ? `Hint ${hintsRemaining} of ${MAX_HINTS}. Recharging.`
               : `Hint ${hintsRemaining} of ${MAX_HINTS}`
           }
-          disabled={hintsRemaining === 0 || isComplete}
+          disabled={
+            scenePhase !== "ready" || hintsRemaining === 0 || isComplete
+          }
           onClick={handleHintClick}
           style={{ "--hint-fill": `${hintFillPercent}%` }}
         >
@@ -393,7 +594,11 @@ export default function GameScene({
       <div className="scene-viewport">
         <div
           className={`scene-frame ${isComplete ? "is-complete" : ""} ${
-            isBackgroundReady ? "is-ready" : "is-loading"
+            scenePhase === "ready"
+              ? "is-scene-ready"
+              : scenePhase === "reveal"
+                ? "is-scene-revealing"
+                : "is-scene-loading"
           }`}
           onClick={handleSceneClick}
           style={{
@@ -402,20 +607,39 @@ export default function GameScene({
           }}
         >
           <img
+            ref={sceneBackgroundImgRef}
             className="scene-background"
             src={level.background}
             alt={`${level.title} seek-and-find scene`}
             draggable="false"
-            onLoad={() => setIsBackgroundReady(true)}
+            onLoad={handleBackgroundReady}
           />
 
-          {!isBackgroundReady && (
-            <span className="scene-loading" aria-live="polite">
-              Loading scene...
-            </span>
+          {(scenePhase === "loading" || scenePhase === "reveal") && (
+            <div
+              ref={loadingOverlayRef}
+              className={`scene-loading ${
+                scenePhase === "reveal" ? "is-exiting" : ""
+              }`}
+              aria-live="polite"
+              onTransitionEnd={handleRevealOverlayTransitionEnd}
+            >
+              <div className="scene-loading-panel">
+                <span className="scene-loading-title">{level.title}</span>
+                <span className="scene-loading-label">Loading</span>
+                <span className="scene-loading-meter" aria-hidden="true">
+                  <span />
+                </span>
+                <span className="scene-loading-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </div>
+            </div>
           )}
 
-          {isBackgroundReady && activeHint && (
+          {scenePhase === "ready" && activeHint && (
             <span
               className="hint-area"
               key={activeHint.id}
@@ -427,50 +651,54 @@ export default function GameScene({
             />
           )}
 
-          {isBackgroundReady && visibleKathleens.map((kathleen) => {
-            const isFound = foundIds.has(kathleen.id);
-            const kathleenSparkles = sparkles.filter(
-              (sparkle) => sparkle.kathleenId === kathleen.id
-            );
+          {scenePhase !== "loading" && (
+            <div className="kathleen-layer">
+              {visibleKathleens.map((kathleen) => {
+                const isFound = foundIds.has(kathleen.id);
+                const kathleenSparkles = sparkles.filter(
+                  (sparkle) => sparkle.kathleenId === kathleen.id
+                );
 
-            return (
-              <button
-                className={`kathleen-target ${isFound ? "is-found" : ""}`}
-                key={kathleen.id}
-                type="button"
-                aria-label={
-                  isFound
-                    ? `${kathleen.label} found`
-                    : `Find ${kathleen.label}`
-                }
-                onClick={(event) => handleKathleenClick(event, kathleen.id)}
-                style={{
-                  left: `${kathleen.x}%`,
-                  top: `${kathleen.y}%`,
-                  width: `${kathleen.width}%`,
-                  "--kathleen-hidden-filter": kathleen.hiddenFilter,
-                  "--kathleen-hidden-opacity": kathleen.hiddenOpacity,
-                  transform: `translate(-50%, -50%) rotate(${
-                    kathleen.rotation ?? 0
-                  }deg)`,
-                  zIndex: kathleen.zIndex ?? 2
-                }}
-              >
-                <img
-                  src={kathleen.src}
-                  alt={kathleen.label}
-                  draggable="false"
-                />
-                {kathleenSparkles.map((sparkle) => (
-                  <span className="mini-sparkles" key={sparkle.id}>
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                ))}
-              </button>
-            );
-          })}
+                return (
+                  <button
+                    className={`kathleen-target ${isFound ? "is-found" : ""}`}
+                    key={kathleen.id}
+                    type="button"
+                    aria-label={
+                      isFound
+                        ? `${kathleen.label} found`
+                        : `Find ${kathleen.label}`
+                    }
+                    onClick={(event) => handleKathleenClick(event, kathleen.id)}
+                    style={{
+                      left: `${kathleen.x}%`,
+                      top: `${kathleen.y}%`,
+                      width: `${kathleen.width}%`,
+                      "--kathleen-hidden-filter": kathleen.hiddenFilter,
+                      "--kathleen-hidden-opacity": kathleen.hiddenOpacity,
+                      transform: `translate(-50%, -50%) rotate(${
+                        kathleen.rotation ?? 0
+                      }deg)`,
+                      zIndex: kathleen.zIndex ?? 2
+                    }}
+                  >
+                    <img
+                      src={kathleen.src}
+                      alt={kathleen.label}
+                      draggable="false"
+                    />
+                    {kathleenSparkles.map((sparkle) => (
+                      <span className="mini-sparkles" key={sparkle.id}>
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    ))}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <Celebration active={isComplete} />
 

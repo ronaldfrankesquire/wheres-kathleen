@@ -11,10 +11,12 @@ const PLACEMENT_MAP_COUNT = 5;
 export default function App() {
   const [currentLevelId, setCurrentLevelId] = useState("scene-level-1");
   const [levelPlayCounts, setLevelPlayCounts] = useState({});
+  const [isHomeOpen, setIsHomeOpen] = useState(true);
   const [isMusicOn, setIsMusicOn] = useState(true);
   const [isSoundEffectsOn, setIsSoundEffectsOn] = useState(true);
   const [isLevelComplete, setIsLevelComplete] = useState(false);
   const backgroundMusicRef = useRef(null);
+  const preloadedImagesRef = useRef(new Map());
   const currentLevelIndex = levels.findIndex(
     (level) => level.id === currentLevelId
   );
@@ -25,6 +27,7 @@ export default function App() {
     (levelPlayCounts[currentLevel.id] ?? 0) % PLACEMENT_MAP_COUNT;
 
   function startLevel(levelId) {
+    setIsHomeOpen(false);
     setLevelPlayCounts((currentPlayCounts) => ({
       ...currentPlayCounts,
       [levelId]: ((currentPlayCounts[levelId] ?? 0) + 1) % PLACEMENT_MAP_COUNT
@@ -46,6 +49,15 @@ export default function App() {
     if (playPromise) {
       playPromise.catch(() => {});
     }
+  }
+
+  function handleEnterGame() {
+    setIsHomeOpen(false);
+    playBackgroundMusic();
+  }
+
+  function handleHomeClick() {
+    setIsHomeOpen(true);
   }
 
   useEffect(() => {
@@ -84,6 +96,36 @@ export default function App() {
   useEffect(() => {
     setIsLevelComplete(false);
   }, [currentLevel.id]);
+
+  useEffect(() => {
+    const levelsToPreload = [
+      levels[0],
+      levels[currentLevelIndex - 1],
+      currentLevel,
+      nextLevel
+    ].filter(Boolean);
+    const imageSources = new Set();
+
+    levelsToPreload.forEach((level) => {
+      imageSources.add(level.background);
+      level.kathleens.forEach((kathleen) => imageSources.add(kathleen.src));
+
+      if (level.completionKathleen) {
+        imageSources.add(level.completionKathleen.src);
+      }
+    });
+
+    imageSources.forEach((source) => {
+      if (preloadedImagesRef.current.has(source)) {
+        return;
+      }
+
+      const image = new Image();
+      image.decoding = "async";
+      image.src = source;
+      preloadedImagesRef.current.set(source, image);
+    });
+  }, [currentLevel, currentLevelIndex, nextLevel]);
 
   useEffect(() => {
     if (isMusicOn && !isLevelComplete) {
@@ -149,7 +191,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${isHomeOpen ? "is-home-open" : ""}`}>
       <audio
         ref={backgroundMusicRef}
         src={BACKGROUND_TRACK_SRC}
@@ -157,66 +199,130 @@ export default function App() {
         preload="auto"
       />
 
-      <nav className="level-switcher" aria-label="Choose scene">
-        <button
-          className="level-step-button"
-          type="button"
-          disabled={currentLevelIndex <= 0}
-          onClick={() => startLevel(levels[currentLevelIndex - 1].id)}
+      {isHomeOpen && (
+        <section
+          className="title-screen"
+          style={{ "--title-background": `url("${levels[0].background}")` }}
+          aria-labelledby="title-screen-heading"
         >
-          Previous
-        </button>
+          <div className="title-panel">
+            <h1 className="title-logo" id="title-screen-heading">
+              Where&apos;s Kathleen?
+            </h1>
+            <div className="title-actions" aria-label="Title actions">
+              <button
+                className="title-play-button"
+                type="button"
+                onClick={handleEnterGame}
+              >
+                Play
+              </button>
+            </div>
+            <div className="title-audio-actions" aria-label="Audio controls">
+              <button
+                className="audio-toggle title-audio-toggle"
+                type="button"
+                aria-pressed={isMusicOn}
+                onClick={handleMusicToggle}
+              >
+                {isMusicOn ? "Music on" : "Music off"}
+              </button>
+              <button
+                className="audio-toggle title-audio-toggle"
+                type="button"
+                aria-pressed={isSoundEffectsOn}
+                onClick={handleSoundEffectsToggle}
+              >
+                {isSoundEffectsOn ? "Effects on" : "Effects off"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
-        <span className="current-level-pill" aria-live="polite">
-          {currentLevel.title}
-        </span>
+      <div
+        className={`game-view ${isHomeOpen ? "is-hidden" : ""}`}
+        aria-hidden={isHomeOpen}
+      >
+        <nav className="level-switcher" aria-label="Game controls">
+          <button
+            className="level-step-button home-button home-icon-button"
+            type="button"
+            aria-label="Home"
+            title="Home"
+            onClick={handleHomeClick}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              focusable="false"
+            >
+              <path d="M3 10.7 12 3l9 7.7" />
+              <path d="M5.5 9.4V21h5v-6h3v6h5V9.4" />
+            </svg>
+          </button>
 
-        <button
-          className="level-step-button"
-          type="button"
-          disabled={!nextLevel}
-          onClick={() => {
+          <button
+            className="level-step-button"
+            type="button"
+            disabled={currentLevelIndex <= 0}
+            onClick={() => startLevel(levels[currentLevelIndex - 1].id)}
+          >
+            Previous
+          </button>
+
+          <span className="current-level-pill" aria-live="polite">
+            {currentLevel.title}
+          </span>
+
+          <button
+            className="level-step-button"
+            type="button"
+            disabled={!nextLevel}
+            onClick={() => {
+              if (nextLevel) {
+                startLevel(nextLevel.id);
+              }
+            }}
+          >
+            Next
+          </button>
+
+          <button
+            className="audio-toggle"
+            type="button"
+            aria-pressed={isMusicOn}
+            onClick={handleMusicToggle}
+          >
+            {isMusicOn ? "Music on" : "Music off"}
+          </button>
+
+          <button
+            className="audio-toggle"
+            type="button"
+            aria-pressed={isSoundEffectsOn}
+            onClick={handleSoundEffectsToggle}
+          >
+            {isSoundEffectsOn ? "Effects on" : "Effects off"}
+          </button>
+        </nav>
+
+        <GameScene
+          key={`${currentLevel.id}-${currentLevel.background}-${currentPlacementMapIndex}`}
+          isActive={!isHomeOpen}
+          level={currentLevel}
+          placementMapIndex={currentPlacementMapIndex}
+          hasNextLevel={Boolean(nextLevel)}
+          soundEffectsOn={isSoundEffectsOn}
+          onLevelComplete={handleLevelComplete}
+          onNextLevel={() => {
             if (nextLevel) {
               startLevel(nextLevel.id);
             }
           }}
-        >
-          Next
-        </button>
-
-        <button
-          className="audio-toggle"
-          type="button"
-          aria-pressed={isMusicOn}
-          onClick={handleMusicToggle}
-        >
-          {isMusicOn ? "Music on" : "Music off"}
-        </button>
-
-        <button
-          className="audio-toggle"
-          type="button"
-          aria-pressed={isSoundEffectsOn}
-          onClick={handleSoundEffectsToggle}
-        >
-          {isSoundEffectsOn ? "Effects on" : "Effects off"}
-        </button>
-      </nav>
-
-      <GameScene
-        key={`${currentLevel.id}-${currentLevel.background}-${currentPlacementMapIndex}`}
-        level={currentLevel}
-        placementMapIndex={currentPlacementMapIndex}
-        hasNextLevel={Boolean(nextLevel)}
-        soundEffectsOn={isSoundEffectsOn}
-        onLevelComplete={handleLevelComplete}
-        onNextLevel={() => {
-          if (nextLevel) {
-            startLevel(nextLevel.id);
-          }
-        }}
-        onRestartLevel={handleRestartLevel}
-      />
+          onRestartLevel={handleRestartLevel}
+        />
+      </div>
     </main>
   );
 }
